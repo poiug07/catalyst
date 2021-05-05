@@ -11,10 +11,7 @@ class HeadSpec(ABC, nn.Module):
     """@TODO: Docs. Contribution is welcome."""
 
     def __init__(
-        self,
-        in_channels: List[int],
-        out_channles: int,
-        in_strides: List[int] = None,
+        self, in_channels: List[int], out_channles: int, in_strides: List[int] = None,
     ):
         """@TODO: Docs. Contribution is welcome."""
         super().__init__()
@@ -26,3 +23,6 @@ class HeadSpec(ABC, nn.Module):
     def forward(self, x: List[torch.Tensor]) -> torch.Tensor:
         """Forward call."""
         pass
+
+
+__all__ = ["HeadSpec"]

@@ -1,14 +1,30 @@
-# flake8: noqa
-# TODO: docs and refactor for datasets-contrib
-import codecs
+from typing import Any, Callable, Dict, List, Optional
 import os
-
-import numpy as np
 
 import torch
 from torch.utils.data import Dataset
 
-from catalyst.contrib.datasets.utils import download_and_extract_archive
+from catalyst.contrib.datasets.functional import (
+    download_and_extract_archive,
+    read_sn3_pascalvincent_tensor,
+)
+from catalyst.data.dataset.metric_learning import MetricLearningTrainDataset, QueryGalleryDataset
+
+
+def _read_label_file(path):
+    with open(path, "rb") as f:
+        x = read_sn3_pascalvincent_tensor(f, strict=False)
+    assert x.dtype == torch.uint8
+    assert x.ndimension() == 1
+    return x.long()
+
+
+def _read_image_file(path):
+    with open(path, "rb") as f:
+        x = read_sn3_pascalvincent_tensor(f, strict=False)
+    assert x.dtype == torch.uint8
+    assert x.ndimension() == 3
+    return x
 
 
 class MNIST(Dataset):
@@ -16,21 +32,22 @@ class MNIST(Dataset):
 
     _repr_indent = 4
 
+    # CVDF mirror of http://yann.lecun.com/exdb/mnist/
     resources = [
         (
-            "http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz",
+            "https://storage.googleapis.com/cvdf-datasets/mnist/train-images-idx3-ubyte.gz",
             "f68b3c2dcbeaaa9fbdd348bbdeb94873",
         ),
         (
-            "http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz",
+            "https://storage.googleapis.com/cvdf-datasets/mnist/train-labels-idx1-ubyte.gz",
             "d53e105ee54ea40749a09fcbcd1e9432",
         ),
         (
-            "http://yann.lecun.com/exdb/mnist/t10k-images-idx3-ubyte.gz",
+            "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte.gz",
             "9fb629c4189551a2d022fa330f9573f3",
         ),
         (
-            "http://yann.lecun.com/exdb/mnist/t10k-labels-idx1-ubyte.gz",
+            "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-labels-idx1-ubyte.gz",
             "ec29112dd5afa0611ce80d1b7f02629c",
         ),
     ]
@@ -51,16 +68,11 @@ class MNIST(Dataset):
     ]
 
     def __init__(
-        self,
-        root,
-        train=True,
-        transform=None,
-        target_transform=None,
-        download=False,
+        self, root, train=True, transform=None, target_transform=None, download=False,
     ):
         """
         Args:
-            root (string): Root directory of dataset where
+            root: Root directory of dataset where
                 ``MNIST/processed/training.pt``
                 and  ``MNIST/processed/test.pt`` exist.
             train (bool, optional): If True, creates dataset from
@@ -84,22 +96,18 @@ class MNIST(Dataset):
             self.download()
 
         if not self._check_exists():
-            raise RuntimeError(
-                "Dataset not found. You can use download=True to download it"
-            )
+            raise RuntimeError("Dataset not found. You can use download=True to download it")
 
         if self.train:
             data_file = self.training_file
         else:
             data_file = self.test_file
-        self.data, self.targets = torch.load(
-            os.path.join(self.processed_folder, data_file)
-        )
+        self.data, self.targets = torch.load(os.path.join(self.processed_folder, data_file))
 
     def __getitem__(self, index):
         """
         Args:
-            index (int): Index
+            index: Index
 
         Returns:
             tuple: (image, target) where target is index of the target class.
@@ -148,9 +156,7 @@ class MNIST(Dataset):
     def _check_exists(self):
         return os.path.exists(
             os.path.join(self.processed_folder, self.training_file)
-        ) and os.path.exists(
-            os.path.join(self.processed_folder, self.test_file)
-        )
+        ) and os.path.exists(os.path.join(self.processed_folder, self.test_file))
 
     def download(self):
         """Download the MNIST data if it doesn't exist in processed_folder."""
@@ -171,28 +177,16 @@ class MNIST(Dataset):
         print("Processing...")
 
         training_set = (
-            read_image_file(
-                os.path.join(self.raw_folder, "train-images-idx3-ubyte")
-            ),
-            read_label_file(
-                os.path.join(self.raw_folder, "train-labels-idx1-ubyte")
-            ),
+            _read_image_file(os.path.join(self.raw_folder, "train-images-idx3-ubyte")),
+            _read_label_file(os.path.join(self.raw_folder, "train-labels-idx1-ubyte")),
         )
         test_set = (
-            read_image_file(
-                os.path.join(self.raw_folder, "t10k-images-idx3-ubyte")
-            ),
-            read_label_file(
-                os.path.join(self.raw_folder, "t10k-labels-idx1-ubyte")
-            ),
+            _read_image_file(os.path.join(self.raw_folder, "t10k-images-idx3-ubyte")),
+            _read_label_file(os.path.join(self.raw_folder, "t10k-labels-idx1-ubyte")),
         )
-        with open(
-            os.path.join(self.processed_folder, self.training_file), "wb"
-        ) as f:
+        with open(os.path.join(self.processed_folder, self.training_file), "wb") as f:
             torch.save(training_set, f)
-        with open(
-            os.path.join(self.processed_folder, self.test_file), "wb"
-        ) as f:
+        with open(os.path.join(self.processed_folder, self.test_file), "wb") as f:
             torch.save(test_set, f)
 
         print("Done!")
@@ -202,72 +196,140 @@ class MNIST(Dataset):
         return "Split: {}".format("Train" if self.train is True else "Test")
 
 
-def get_int(b):
-    """@TODO: Docs. Contribution is welcome."""
-    return int(codecs.encode(b, "hex"), 16)
-
-
-def open_maybe_compressed_file(path):
-    """Return a file object that possibly decompresses 'path' on the fly.
-    Decompression occurs when argument `path` is a string
-    and ends with '.gz' or '.xz'.
+class MnistMLDataset(MetricLearningTrainDataset, MNIST):
     """
-    if not isinstance(path, torch._six.string_classes):  # noqa: WPS437
-        return path
-    if path.endswith(".gz"):
-        import gzip
+    Simple wrapper for MNIST dataset for metric learning train stage.
+    This dataset can be used only for training. For test stage
+    use MnistQGDataset.
 
-        return gzip.open(path, "rb")
-    if path.endswith(".xz"):
-        import lzma
-
-        return lzma.open(path, "rb")
-    return open(path, "rb")
-
-
-def read_sn3_pascalvincent_tensor(path, strict=True):
-    """Read a SN3 file in "Pascal Vincent" format.
-    Argument may be a filename, compressed filename, or file object.
+    For this dataset we use only training part of the MNIST and only
+    those images that are labeled as 0, 1, 2, 3, 4.
     """
-    # typemap
-    if not hasattr(read_sn3_pascalvincent_tensor, "typemap"):
-        read_sn3_pascalvincent_tensor.typemap = {
-            8: (torch.uint8, np.uint8, np.uint8),
-            9: (torch.int8, np.int8, np.int8),
-            11: (torch.int16, np.dtype(">i2"), "i2"),
-            12: (torch.int32, np.dtype(">i4"), "i4"),
-            13: (torch.float32, np.dtype(">f4"), "f4"),
-            14: (torch.float64, np.dtype(">f8"), "f8"),
+
+    _split = 5
+    classes = [
+        "0 - zero",
+        "1 - one",
+        "2 - two",
+        "3 - three",
+        "4 - four",
+    ]
+
+    def __init__(self, **kwargs):
+        """
+        Raises:
+            ValueError: if train argument is False (MnistMLDataset
+                should be used only for training)
+        """
+        if "train" in kwargs:
+            if kwargs["train"] is False:
+                raise ValueError("MnistMLDataset can be used only for training stage.")
+        else:
+            kwargs["train"] = True
+        super(MnistMLDataset, self).__init__(**kwargs)
+        self._filter()
+
+    def get_labels(self) -> List[int]:
+        """
+        Returns:
+            labels of digits
+        """
+        return self.targets.tolist()
+
+    def _filter(self) -> None:
+        """Filter MNIST dataset: select images of 0, 1, 2, 3, 4 classes."""
+        mask = self.targets < self._split
+        self.data = self.data[mask]
+        self.targets = self.targets[mask]
+
+
+class MnistQGDataset(QueryGalleryDataset):
+    """
+    MNIST for metric learning with query and gallery split.
+    MnistQGDataset should be used for test stage.
+
+    For this dataset we used only test part of the MNIST and only
+    those images that are labeled as 5, 6, 7, 8, 9.
+    """
+
+    _split = 5
+    classes = [
+        "5 - five",
+        "6 - six",
+        "7 - seven",
+        "8 - eight",
+        "9 - nine",
+    ]
+
+    def __init__(
+        self, root: str, transform: Optional[Callable] = None, gallery_fraq: Optional[float] = 0.2,
+    ) -> None:
+        """
+        Args:
+            root: root directory for storing dataset
+            transform: transform
+            gallery_fraq: gallery size
+        """
+        self._mnist = MNIST(root, train=False, download=True, transform=transform)
+        self._filter()
+
+        self._gallery_size = int(gallery_fraq * len(self._mnist))
+        self._query_size = len(self._mnist) - self._gallery_size
+
+        self._is_query = torch.zeros(len(self._mnist)).type(torch.bool)
+        self._is_query[: self._query_size] = True
+
+    def _filter(self) -> None:
+        """Filter MNIST dataset: select images of 5, 6, 7, 8, 9 classes."""
+        mask = self._mnist.targets >= self._split
+        self._mnist.data = self._mnist.data[mask]
+        self._mnist.targets = self._mnist.targets[mask]
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        """
+        Get item method for dataset
+
+
+        Args:
+            idx: index of the object
+
+        Returns:
+            Dict with features, targets and is_query flag
+        """
+        image, label = self._mnist[idx]
+        return {
+            "features": image,
+            "targets": label,
+            "is_query": self._is_query[idx],
         }
-    # read
-    with open_maybe_compressed_file(path) as f:
-        data = f.read()
-    # parse
-    magic = get_int(data[0:4])  # noqa: WPS349
-    nd = magic % 256
-    ty = magic // 256
-    assert nd >= 1 and nd <= 3
-    assert ty >= 8 and ty <= 14
-    m = read_sn3_pascalvincent_tensor.typemap[ty]
-    s = [get_int(data[4 * (i + 1) : 4 * (i + 2)]) for i in range(nd)]
-    parsed = np.frombuffer(data, dtype=m[1], offset=(4 * (nd + 1)))
-    assert parsed.shape[0] == np.prod(s) or not strict
-    return torch.from_numpy(parsed.astype(m[2], copy=False)).view(*s)
+
+    def __len__(self) -> int:
+        """Length"""
+        return len(self._mnist)
+
+    def __repr__(self) -> None:
+        """Print info about the dataset"""
+        return self._mnist.__repr__()
+
+    @property
+    def gallery_size(self) -> int:
+        """Query Gallery dataset should have gallery_size property"""
+        return self._gallery_size
+
+    @property
+    def query_size(self) -> int:
+        """Query Gallery dataset should have query_size property"""
+        return self._query_size
+
+    @property
+    def data(self) -> torch.Tensor:
+        """Images from MNIST"""
+        return self._mnist.data
+
+    @property
+    def targets(self) -> torch.Tensor:
+        """Labels of digits"""
+        return self._mnist.targets
 
 
-def read_label_file(path):
-    """@TODO: Docs. Contribution is welcome."""
-    with open(path, "rb") as f:
-        x = read_sn3_pascalvincent_tensor(f, strict=False)
-    assert x.dtype == torch.uint8
-    assert x.ndimension() == 1
-    return x.long()
-
-
-def read_image_file(path):
-    """@TODO: Docs. Contribution is welcome."""
-    with open(path, "rb") as f:
-        x = read_sn3_pascalvincent_tensor(f, strict=False)
-    assert x.dtype == torch.uint8
-    assert x.ndimension() == 3
-    return x
+__all__ = ["MNIST", "MnistMLDataset", "MnistQGDataset"]

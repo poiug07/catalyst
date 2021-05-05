@@ -6,10 +6,11 @@ from pathlib import Path
 import torch
 from torch import nn
 import torchvision
+from torchvision.models import ResNet
 
 from catalyst import utils
 from catalyst.contrib.nn.modules import Flatten
-from catalyst.registry import MODULE
+from catalyst.registry import REGISTRY
 
 
 class ResnetEncoder(nn.Module):
@@ -35,12 +36,12 @@ class ResnetEncoder(nn.Module):
     ):
         """
         Args:
-            arch (str): Name for resnet. Have to be one of
+            arch: Name for resnet. Have to be one of
                 resnet18, resnet34, resnet50, resnet101, resnet152
-            pretrained (bool): If True, returns a model pre-trained on ImageNet
-            frozen (bool): If frozen, sets requires_grad to False
-            pooling (str): pooling
-            pooling_kwargs (dict): params for pooling
+            pretrained: If True, returns a model pre-trained on ImageNet
+            frozen: If frozen, sets requires_grad to False
+            pooling: pooling
+            pooling_kwargs: params for pooling
             state_dict (Union[dict, str, Path]): Path to ``torch.Model``
                 or a dict containing parameters and persistent buffers.
         """
@@ -60,20 +61,16 @@ class ResnetEncoder(nn.Module):
 
         if pooling is not None:
             pooling_kwargs = pooling_kwargs or {}
-            pooling_layer_fn = MODULE.get(pooling)
+            pooling_layer_fn = REGISTRY.get(pooling)
             pooling_layer = (
-                pooling_layer_fn(
-                    in_features=resnet.fc.in_features, **pooling_kwargs
-                )
+                pooling_layer_fn(in_features=resnet.fc.in_features, **pooling_kwargs)
                 if "attn" in pooling.lower()
                 else pooling_layer_fn(**pooling_kwargs)
             )
             modules += [pooling_layer]
 
             if hasattr(pooling_layer, "out_features"):
-                out_features = pooling_layer.out_features(
-                    in_features=resnet.fc.in_features
-                )
+                out_features = pooling_layer.out_features(in_features=resnet.fc.in_features)
             else:
                 out_features = None
         else:
@@ -88,3 +85,26 @@ class ResnetEncoder(nn.Module):
         """Extract the image feature vectors."""
         features = self.encoder(image)
         return features
+
+
+def get_resnet1d(model: ResNet) -> ResNet:
+    """
+    Args:
+        model: ResNet model
+
+    Returns:
+        ResNet model with changed 1st conv layer
+    """
+    conv_old = model.conv1
+    model.conv1 = nn.Conv2d(
+        in_channels=1,
+        out_channels=conv_old.out_channels,
+        kernel_size=conv_old.kernel_size,
+        stride=conv_old.stride,
+        padding=conv_old.padding,
+        bias=conv_old.bias,
+    )
+    return model
+
+
+__all__ = ["ResnetEncoder"]

@@ -4,10 +4,7 @@ from typing import List
 
 import torch
 
-from catalyst.contrib.models.cv.segmentation.blocks import (
-    EncoderBlock,
-    EncoderDownsampleBlock,
-)
+from catalyst.contrib.models.cv.segmentation.blocks import EncoderBlock, EncoderDownsampleBlock
 from catalyst.contrib.models.cv.segmentation.bridge.core import BridgeSpec
 
 
@@ -51,3 +48,6 @@ class UnetBridge(BridgeSpec):
         x_last: torch.Tensor = self.block(x_last)
         output = x + [x_last]
         return output
+
+
+__all__ = ["UnetBridge"]

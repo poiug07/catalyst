@@ -65,7 +65,7 @@ class GaussianNoise(nn.Module):
     def __init__(self, stddev: float = 0.1):
         """
         Args:
-            stddev (float): The standard deviation of the normal distribution.
+            stddev: The standard deviation of the normal distribution.
                 Default: 0.1.
         """
         super().__init__()
@@ -75,3 +75,6 @@ class GaussianNoise(nn.Module):
         """Forward call."""
         noise = torch.empty_like(x)
         noise.normal_(0, self.stddev)
+
+
+__all__ = ["Flatten", "Lambda", "Normalize", "GaussianNoise"]

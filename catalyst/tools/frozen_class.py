@@ -1,9 +1,3 @@
-"""
-Frozen class.
-Example of usage can be found in :py:class:`catalyst.core.runner.IRunner`.
-"""
-
-
 class FrozenClass:
     """Class which prohibit ``__setattr__`` on existing attributes.
 
@@ -24,3 +18,6 @@ class FrozenClass:
 
     def _unfreeze(self):
         self.__is_frozen = False
+
+
+__all__ = ["FrozenClass"]
